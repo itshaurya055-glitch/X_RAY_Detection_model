@@ -13,9 +13,14 @@ models/
 *.h5
 *.keras
 
-# images
+# ignore all images
 *.png
 *.jpg
+
+# BUT allow evaluation results
+!evaluation_results/
+!evaluation_results/*.png
+!evaluation_results/*.csv
 
 # logs
 logs/
