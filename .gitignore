@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+
+# data
+processed_data/
+Lung Segmentation/
+train/
+test/
+val/
+
+# models
+models/
+*.h5
+*.keras
+
+# images
+*.png
+*.jpg
+
+# logs
+logs/
+*.csv
