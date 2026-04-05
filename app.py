@@ -73,38 +73,36 @@ def preprocess(img_rgb):
     img = cv2.resize(img_rgb, IMG_SIZE).astype(np.float32) / 255.0
     return np.expand_dims((img - MEAN) / STD, axis=0)
 
+if np.isnan(prob_tb):
+    prob_tb = 0.0
 
 def make_gradcam(img_array):
-    densenet    = model.get_layer("densenet121")
-    last_conv   = densenet.get_layer("conv5_block16_2_conv")
-    inner_model = tf.keras.Model(inputs=densenet.input,
-                                 outputs=[last_conv.output, densenet.output])
-    gap       = model.get_layer("global_average_pooling2d")
-    drop1     = model.get_layer("dropout")
-    dense1    = model.get_layer("dense")
-    bn        = model.get_layer("batch_normalization")
-    drop2     = model.get_layer("dropout_1")
-    out_layer = model.get_layer("tb_prediction")
+    try:
+        grad_model = tf.keras.models.Model(
+            [model.inputs],
+            [model.get_layer("conv5_block16_concat").output, model.output]
+        )
 
-    with tf.GradientTape() as tape:
-        img_t = tf.cast(img_array, tf.float32)
-        conv_out, dn_out = inner_model(img_t, training=False)
-        tape.watch(conv_out)
-        x = gap(dn_out)
-        x = drop1(x, training=False)
-        x = dense1(x)
-        x = bn(x, training=False)
-        x = drop2(x, training=False)
-        preds = out_layer(x)
-        loss  = preds[:, 0]
+        with tf.GradientTape() as tape:
+            conv_outputs, predictions = grad_model(img_array)
+            loss = predictions[:, 0]
 
-    grads   = tape.gradient(loss, conv_out)
-    pooled  = tf.reduce_mean(grads, axis=(0, 1, 2))
-    heatmap = np.squeeze((conv_out[0] @ pooled[..., tf.newaxis]).numpy())
-    heatmap = np.maximum(heatmap, 0)
-    if heatmap.max() > 0:
-        heatmap /= heatmap.max()
-    return heatmap
+        grads = tape.gradient(loss, conv_outputs)
+
+        pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
+        conv_outputs = conv_outputs[0]
+
+        heatmap = conv_outputs @ pooled_grads[..., tf.newaxis]
+        heatmap = tf.squeeze(heatmap)
+
+        heatmap = np.maximum(heatmap, 0)
+        heatmap /= np.max(heatmap) if np.max(heatmap) != 0 else 1
+
+        return heatmap.numpy()
+
+    except Exception as e:
+        print("❌ GradCAM Error:", e)
+        return None
 
 
 def overlay_heatmap(img_rgb, heatmap, alpha=0.45):
@@ -134,7 +132,6 @@ def to_b64(img_rgb):
     Image.fromarray(img_rgb.astype(np.uint8)).save(buf, format="PNG")
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
 
-
 # ── Predict endpoint ──
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
@@ -159,6 +156,9 @@ async def predict(file: UploadFile = File(...)):
 
         # Add batch dimension
         inp = np.expand_dims(img, axis=0)
+        if inp.shape != (1, 224, 224, 3):
+            print("⚠️ Shape error:", inp.shape)
+            return JSONResponse({"success": False, "error": "Invalid input shape"}, status_code=500)
         print("✅ Final shape:", inp.shape)
 
         # Prediction
@@ -166,9 +166,44 @@ async def predict(file: UploadFile = File(...)):
         print("✅ Prediction done")
 
         prob_tb = float(pred[0][0])
+        if np.isnan(prob_tb):
+            prob_tb = 0.0
         prob_nor = 1 - prob_tb
         is_tb = prob_tb >= THRESHOLD
         conf = prob_tb if is_tb else prob_nor
+
+        gradcam_b64 = None
+        bbox = None
+
+        if prob_tb > 0.7:
+            print("🔥 Running GradCAM...")
+
+            heatmap = make_gradcam(inp)
+
+            if heatmap is not None:
+                #heatmap = cv2.resize(heatmap, (224, 224))
+                heatmap = cv2.resize(heatmap, (224, 224), interpolation=cv2.INTER_CUBIC)
+
+                heatmap_colored = cv2.applyColorMap(
+                    np.uint8(255 * heatmap),
+                    cv2.COLORMAP_JET
+                )
+
+                original_img = (img * 255).astype(np.uint8)
+
+                overlay = cv2.addWeighted(
+                    original_img, 0.6,
+                    heatmap_colored, 0.4, 0
+                )
+
+                _, buffer = cv2.imencode('.jpg', overlay)
+                gradcam_b64 = "data:image/jpeg;base64," + base64.b64encode(buffer).decode()
+
+                bbox = get_bbox(heatmap, 224, 224)
+
+                print("✅ GradCAM done")
+            else:
+                print("⚠️ GradCAM failed")
 
         return JSONResponse({
             "success": True,
@@ -178,8 +213,8 @@ async def predict(file: UploadFile = File(...)):
             "confidence": round(conf * 100, 1),
             "label": "HIGH RISK OF TUBERCULOSIS" if is_tb else "NORMAL — No TB Detected",
             "finding": "TB detected" if is_tb else "No TB detected",
-            "gradcam_b64": None,
-            "bbox": None,
+            "gradcam_b64": gradcam_b64,
+            "bbox": bbox,
             "filename": file.filename,
         })
 
