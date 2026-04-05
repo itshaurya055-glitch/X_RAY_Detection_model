@@ -36,6 +36,10 @@ function processFile(file) {
   const reader = new FileReader();
   reader.onload = e => {
     currentImgSrc = e.target.result;
+    const processingSub = document.querySelector('.processing-sub');
+    if (processingSub) {
+      processingSub.textContent = 'Running CheXNet DenseNet-121 inference';
+    }
     document.getElementById('state-upload').style.display = 'none';
     document.getElementById('state-processing').style.display = 'block';
     document.getElementById('processing-img').src = currentImgSrc;
@@ -47,6 +51,13 @@ function processFile(file) {
 }
 
 async function callAPI(file, imgSrc) {
+  const wakeupTimer = setTimeout(() => {
+    const processingSub = document.querySelector('.processing-sub');
+    if (processingSub) {
+      processingSub.textContent = '⏳ Server waking up, please wait 30-60 seconds...';
+    }
+  }, 10000);
+
   try {
     const formData = new FormData();
     formData.append('file', file);
@@ -68,6 +79,8 @@ async function callAPI(file, imgSrc) {
     document.getElementById('state-processing').style.display = 'none';
     document.getElementById('state-upload').style.display = 'block';
     alert(`Error: ${err.message}`);
+  } finally {
+    clearTimeout(wakeupTimer);
   }
 }
 

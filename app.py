@@ -2,11 +2,14 @@ import io
 import os
 import numpy as np
 import base64
+import threading
+import time
 from pathlib import Path
 
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+import requests
 
 from PIL import Image
 import tensorflow as tf
@@ -25,6 +28,17 @@ STD  = np.array([0.229, 0.224, 0.225])
 
 app = FastAPI()
 
+def keep_alive():
+    while True:
+        time.sleep(14 * 60)
+        try:
+            requests.get("https://x-ray-detection-model.onrender.com/health", timeout=10)
+            print("♻️ Keep-alive ping sent")
+        except Exception:
+            pass
+
+threading.Thread(target=keep_alive, daemon=True).start()
+
 # Static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -42,16 +56,6 @@ if not os.path.exists(MODEL_PATH):
     url = "https://drive.google.com/uc?id=11uhh09WzNMH3ZbXDhAPNtVO4fn5o3DXE"
     gdown.download(url, MODEL_PATH, quiet=False)
 
-import gdown
-
-MODEL_PATH = "best_model_phase2.keras"
-
-# Download if not exists
-if not os.path.exists(MODEL_PATH):
-    print("⬇️ Downloading model from Google Drive...")
-    url = "https://drive.google.com/uc?id=11uhh09WzNMH3ZbXDhAPNtVO4fn5o3DXE"
-    gdown.download(url, MODEL_PATH, quiet=False)
-
 # 🔥 SAFE MODEL LOADING (PUT HERE)
 try:
     print("🚀 Loading model...")
@@ -66,6 +70,7 @@ model.predict(dummy)
 #print("🔥 Model warmed up")
 
 # ─────────────────────────────────────────────
+
 # SERVE UI
 # ─────────────────────────────────────────────
 
