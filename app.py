@@ -1,14 +1,17 @@
 """
 =============================================================
- TB Detection - FastAPI Backend (FINAL OPTIMIZED VERSION)
+ TB Detection - FULL STACK (FastAPI + Frontend Serving)
+ FINAL STABLE VERSION 🚀
 =============================================================
 """
 
 import io, os, base64, cv2, numpy as np
 from PIL import Image
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 import tensorflow as tf
 import gdown
 
@@ -21,11 +24,10 @@ GDRIVE_FILE_ID = "11uhh09WzNMH3ZbXDhAPNtVO4fn5o3DXE"
 MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 STD  = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
-# Disable GPU (important for Render)
 tf.config.set_visible_devices([], 'GPU')
 
 # ───────────────── APP INIT ─────────────────
-app = FastAPI(title="TB Detection API")
+app = FastAPI(title="TB Detection AI")
 
 app.add_middleware(
     CORSMiddleware,
@@ -34,7 +36,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-model = None  # global model
+# ─── STATIC + TEMPLATE ───
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
+
+model = None
 
 # ───────────────── DOWNLOAD MODEL ─────────────────
 def download_model():
@@ -47,23 +53,35 @@ def download_model():
     gdown.download(url, MODEL_PATH, quiet=False)
     print("✅ Download complete")
 
-# ───────────────── STARTUP LOAD ─────────────────
+# ───────────────── STARTUP ─────────────────
 @app.on_event("startup")
 def load_model():
     global model
     try:
         print("🚀 Starting server...")
-
         download_model()
 
         print("📦 Loading model...")
         model = tf.keras.models.load_model(MODEL_PATH)
 
-        print("✅ Model loaded successfully!")
-
+        print("✅ Model loaded!")
     except Exception as e:
         print("❌ Startup error:", e)
         model = None
+
+# ───────────────── ROUTES ─────────────────
+
+# 🔥 Serve frontend
+@app.get("/")
+def serve_dashboard(request: Request):
+    return templates.TemplateResponse("dashboard.html", {"request": request})
+
+@app.get("/health")
+def health():
+    return {
+        "status": "ok",
+        "model_loaded": model is not None
+    }
 
 # ───────────────── PREPROCESS ─────────────────
 def preprocess(img):
@@ -104,43 +122,23 @@ def overlay_heatmap(img, heatmap):
     h, w = img.shape[:2]
     heatmap = cv2.resize(heatmap, (w, h))
     heatmap = np.uint8(255 * heatmap)
-
     heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
-    superimposed = cv2.addWeighted(img, 0.6, heatmap, 0.4, 0)
-
-    return superimposed
+    return cv2.addWeighted(img, 0.6, heatmap, 0.4, 0)
 
 def to_b64(img):
     buf = io.BytesIO()
     Image.fromarray(img).save(buf, format="PNG")
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
 
-# ───────────────── API ─────────────────
-@app.get("/")
-def home():
-    return {"message": "TB Detection API Running"}
-
-@app.get("/health")
-def health():
-    return {
-        "status": "ok",
-        "model_loaded": model is not None
-    }
-
+# ───────────────── PREDICT ─────────────────
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
     try:
         if model is None:
-            return JSONResponse(
-                {"success": False, "error": "Model not loaded"},
-                status_code=500
-            )
+            return JSONResponse({"error": "Model not loaded"}, status_code=500)
 
         if file.content_type not in ["image/jpeg", "image/png"]:
-            return JSONResponse(
-                {"error": "Invalid file type"},
-                status_code=400
-            )
+            return JSONResponse({"error": "Invalid file type"}, status_code=400)
 
         contents = await file.read()
         img = Image.open(io.BytesIO(contents)).convert("RGB")
@@ -159,7 +157,6 @@ async def predict(file: UploadFile = File(...)):
         is_tb = prob_tb >= THRESHOLD
         confidence = prob_tb if is_tb else prob_normal
 
-        # GradCAM
         heatmap = make_gradcam(inp)
         gradcam_img = None
 
@@ -179,10 +176,7 @@ async def predict(file: UploadFile = File(...)):
 
     except Exception as e:
         print("❌ Prediction error:", e)
-        return JSONResponse(
-            {"success": False, "error": str(e)},
-            status_code=500
-        )
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 # ───────────────── RUN ─────────────────
 if __name__ == "__main__":

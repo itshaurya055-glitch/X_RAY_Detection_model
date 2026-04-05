@@ -8,3 +8,4 @@ numpy
 matplotlib
 requests
 gdown
+jinja2
