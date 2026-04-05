@@ -1,6 +1,6 @@
 """
 =============================================================
- TB Detection - FINAL STABLE FULL STACK (NO CRASH VERSION)
+ TB Detection - FINAL STABLE (RENDER SAFE + FRONTEND + AI)
 =============================================================
 """
 
@@ -17,11 +17,12 @@ import gdown
 # ───────────────── CONFIG ─────────────────
 IMG_SIZE = (224, 224)
 THRESHOLD = 0.35
+
 MODEL_PATH = "best_model_phase2.keras"
 GDRIVE_FILE_ID = "11uhh09WzNMH3ZbXDhAPNtVO4fn5o3DXE"
 
 MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+STD  = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
 # Disable GPU (important for Render)
 tf.config.set_visible_devices([], 'GPU')
@@ -36,9 +37,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Static + Templates
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+# 🔥 FIXED PATHS (IMPORTANT FOR RENDER)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+app.mount(
+    "/static",
+    StaticFiles(directory=os.path.join(BASE_DIR, "static")),
+    name="static"
+)
+
+templates = Jinja2Templates(
+    directory=os.path.join(BASE_DIR, "templates")
+)
 
 model = None
 
@@ -64,7 +74,8 @@ def load_model():
         print("📦 Loading model...")
         model = tf.keras.models.load_model(MODEL_PATH)
 
-        print("✅ Model loaded!")
+        print("✅ Model loaded successfully!")
+
     except Exception as e:
         print("❌ Startup error:", e)
         model = None
@@ -187,7 +198,12 @@ async def predict(file: UploadFile = File(...)):
             "prob_normal": round(prob_normal * 100, 2),
             "confidence": round(confidence * 100, 2),
             "label": "TB DETECTED" if is_tb else "NORMAL",
-            "gradcam": gradcam_img
+
+            # 🔥 MATCH FRONTEND
+            "gradcam_b64": gradcam_img,
+            "finding": "AI-based analysis completed. Refer to Grad-CAM for highlighted regions.",
+            "filename": file.filename,
+            "bbox": None
         }
 
     except Exception as e:
