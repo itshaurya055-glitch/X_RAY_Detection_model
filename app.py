@@ -218,7 +218,8 @@ async def predict(file: UploadFile = File(...)):
 
         # ── Grad-CAM (always run, not just for high prob)
         print("🔥 Running Grad-CAM...")
-        heatmap     = make_gradcam(inp)
+
+        #heatmap     = make_gradcam(inp)
         gradcam_b64 = None
         bbox        = None
 
