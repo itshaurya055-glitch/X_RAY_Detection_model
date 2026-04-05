@@ -25,3 +25,12 @@ models/
 # logs
 logs/
 *.csv
+
+.vscode/
+.gradio/
+__pycache__/
+*.keras
+*.h5
+.env
+evaluation_results/
+Desktop/
