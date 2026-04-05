@@ -27,7 +27,7 @@ function handleFile(input) {
   if (input.files[0]) processFile(input.files[0]);
 }
 
-const API_URL = 'http://localhost:8000';
+const API_URL = '';
 let history_list = JSON.parse(localStorage.getItem('tb_history') || '[]');
 let currentData = null;
 let currentImgSrc = null;
@@ -50,15 +50,24 @@ async function callAPI(file, imgSrc) {
   try {
     const formData = new FormData();
     formData.append('file', file);
-    const response = await fetch(`${API_URL}/predict`, { method: 'POST', body: formData });
+
+    const response = await fetch('/predict', {
+      method: 'POST',
+      body: formData
+    });
+
     if (!response.ok) throw new Error(`Server error: ${response.status}`);
+
     const data = await response.json();
+
     if (!data.success) throw new Error(data.error || 'Prediction failed');
+
     showResult(data, imgSrc);
+
   } catch (err) {
     document.getElementById('state-processing').style.display = 'none';
     document.getElementById('state-upload').style.display = 'block';
-    alert(`Error: ${err.message}\n\nMake sure backend is running:\npython app.py`);
+    alert(`Error: ${err.message}`);
   }
 }
 
