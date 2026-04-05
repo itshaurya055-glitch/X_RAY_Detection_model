@@ -27,7 +27,7 @@ function handleFile(input) {
   if (input.files[0]) processFile(input.files[0]);
 }
 
-const API_URL = '';
+const API_URL = 'https://x-ray-detection-model.onrender.com';
 let history_list = JSON.parse(localStorage.getItem('tb_history') || '[]');
 let currentData = null;
 let currentImgSrc = null;
@@ -51,7 +51,7 @@ async function callAPI(file, imgSrc) {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await fetch('/predict', {
+    const response = await fetch(`${API_URL}/predict`, {
       method: 'POST',
       body: formData
     });
