@@ -1,7 +1,6 @@
 """
 =============================================================
- TB Detection - FULL STACK (FastAPI + Frontend Serving)
- FINAL STABLE VERSION 🚀
+ TB Detection - FINAL STABLE FULL STACK (NO CRASH VERSION)
 =============================================================
 """
 
@@ -16,14 +15,15 @@ import tensorflow as tf
 import gdown
 
 # ───────────────── CONFIG ─────────────────
-IMG_SIZE  = (224, 224)
+IMG_SIZE = (224, 224)
 THRESHOLD = 0.35
 MODEL_PATH = "best_model_phase2.keras"
 GDRIVE_FILE_ID = "11uhh09WzNMH3ZbXDhAPNtVO4fn5o3DXE"
 
 MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-STD  = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
+# Disable GPU (important for Render)
 tf.config.set_visible_devices([], 'GPU')
 
 # ───────────────── APP INIT ─────────────────
@@ -36,7 +36,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ─── STATIC + TEMPLATE ───
+# Static + Templates
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
@@ -47,7 +47,7 @@ def download_model():
     if os.path.exists(MODEL_PATH):
         print("✅ Model already exists")
         return
-    
+
     print("⬇️ Downloading model...")
     url = f"https://drive.google.com/uc?id={GDRIVE_FILE_ID}"
     gdown.download(url, MODEL_PATH, quiet=False)
@@ -70,8 +70,6 @@ def load_model():
         model = None
 
 # ───────────────── ROUTES ─────────────────
-
-# 🔥 Serve frontend
 @app.get("/")
 def serve_dashboard(request: Request):
     return templates.TemplateResponse("dashboard.html", {"request": request})
@@ -90,12 +88,21 @@ def preprocess(img):
     img = (img - MEAN) / STD
     return np.expand_dims(img, axis=0)
 
-# ───────────────── GRADCAM ─────────────────
+# ───────────────── SAFE GRADCAM ─────────────────
 def make_gradcam(img_array):
     try:
+        last_conv_layer = None
+        for layer in reversed(model.layers):
+            if "conv" in layer.name:
+                last_conv_layer = layer
+                break
+
+        if last_conv_layer is None:
+            return None
+
         grad_model = tf.keras.models.Model(
             [model.inputs],
-            [model.get_layer("conv5_block16_2_conv").output, model.output]
+            [last_conv_layer.output, model.output]
         )
 
         with tf.GradientTape() as tape:
@@ -119,16 +126,22 @@ def make_gradcam(img_array):
         return None
 
 def overlay_heatmap(img, heatmap):
-    h, w = img.shape[:2]
-    heatmap = cv2.resize(heatmap, (w, h))
-    heatmap = np.uint8(255 * heatmap)
-    heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
-    return cv2.addWeighted(img, 0.6, heatmap, 0.4, 0)
+    try:
+        h, w = img.shape[:2]
+        heatmap = cv2.resize(heatmap, (w, h))
+        heatmap = np.uint8(255 * heatmap)
+        heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
+        return cv2.addWeighted(img, 0.6, heatmap, 0.4, 0)
+    except:
+        return img
 
 def to_b64(img):
-    buf = io.BytesIO()
-    Image.fromarray(img).save(buf, format="PNG")
-    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+    try:
+        buf = io.BytesIO()
+        Image.fromarray(img).save(buf, format="PNG")
+        return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+    except:
+        return None
 
 # ───────────────── PREDICT ─────────────────
 @app.post("/predict")
@@ -137,13 +150,14 @@ async def predict(file: UploadFile = File(...)):
         if model is None:
             return JSONResponse({"error": "Model not loaded"}, status_code=500)
 
-        if file.content_type not in ["image/jpeg", "image/png"]:
-            return JSONResponse({"error": "Invalid file type"}, status_code=400)
-
         contents = await file.read()
-        img = Image.open(io.BytesIO(contents)).convert("RGB")
-        img = np.array(img)
 
+        try:
+            img = Image.open(io.BytesIO(contents)).convert("RGB")
+        except:
+            return JSONResponse({"error": "Invalid image file"}, status_code=400)
+
+        img = np.array(img)
         display = cv2.resize(img, IMG_SIZE)
         inp = preprocess(display)
 
@@ -157,12 +171,14 @@ async def predict(file: UploadFile = File(...)):
         is_tb = prob_tb >= THRESHOLD
         confidence = prob_tb if is_tb else prob_normal
 
-        heatmap = make_gradcam(inp)
         gradcam_img = None
-
-        if heatmap is not None:
-            overlay = overlay_heatmap(display, heatmap)
-            gradcam_img = to_b64(overlay)
+        try:
+            heatmap = make_gradcam(inp)
+            if heatmap is not None:
+                overlay = overlay_heatmap(display, heatmap)
+                gradcam_img = to_b64(overlay)
+        except:
+            pass
 
         return {
             "success": True,
@@ -175,7 +191,7 @@ async def predict(file: UploadFile = File(...)):
         }
 
     except Exception as e:
-        print("❌ Prediction error:", e)
+        print("❌ FULL ERROR:", e)
         return JSONResponse({"error": str(e)}, status_code=500)
 
 # ───────────────── RUN ─────────────────
