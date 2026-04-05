@@ -31,16 +31,36 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"],
                    allow_methods=["*"], allow_headers=["*"])
 
 # ── Load model at startup ──
-print("📦 Loading model...")
+import os
+import requests
 import tensorflow as tf
+
+MODEL_URL = "https://drive.google.com/uc?id=11uhh09WzNMH3ZbXDhAPNtVO4fn5o3DXE"
+MODEL_PATH = "model.keras"
+
+def download_model():
+    if not os.path.exists(MODEL_PATH):
+        print("⬇ Downloading model...")
+
+        response = requests.get(MODEL_URL, stream=True, timeout=60)
+        with open(MODEL_PATH, "wb") as f:
+            for chunk in response.iter_content(1024):
+                if chunk:
+                    f.write(chunk)
+
+        print("✅ Model downloaded!")
+
+# 🔥 Run this BEFORE loading model
+download_model()
+
+print("📦 Loading model...")
 model = tf.keras.models.load_model(MODEL_PATH)
 print("✅ Model loaded!")
-
 
 # ── Serve dashboard.html at root ──
 @app.get("/", response_class=HTMLResponse)
 def serve_dashboard():
-    html_path = Path(__file__).parent / "dashboard.html"
+    html_path = Path(__file__).parent / "templates" / "dashboard.html"
     if html_path.exists():
         return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
     return HTMLResponse("<h2>dashboard.html not found</h2>", status_code=404)
@@ -127,9 +147,13 @@ async def predict(file: UploadFile = File(...)):
         is_tb    = prob_tb >= THRESHOLD
         conf     = prob_tb if is_tb else prob_nor
 
-        heatmap     = make_gradcam(inp)
-        gradcam_b64 = to_b64(overlay_heatmap(display, heatmap))
-        bbox        = get_bbox(heatmap, *IMG_SIZE) if is_tb else None
+        if is_tb:
+            heatmap = make_gradcam(inp)
+            gradcam_b64 = to_b64(overlay_heatmap(display, heatmap))
+            bbox = get_bbox(heatmap, *IMG_SIZE)
+        else:
+            gradcam_b64 = None
+            bbox = None
 
         finding = (
             f"Findings highly suggestive of active pulmonary TB. "
