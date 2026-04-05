@@ -16,7 +16,7 @@ from tensorflow.keras.models import load_model
 # CONFIG
 # ─────────────────────────────────────────────
 
-IMG_SIZE = (160, 160)   # 🔥 faster than 224
+IMG_SIZE = (224, 224)   # 🔥 faster than 224
 THRESHOLD = 0.5
 
 # ImageNet normalization
@@ -61,8 +61,8 @@ except Exception as e:
     print("❌ MODEL LOAD ERROR:", str(e))
     raise e
 # 🔥 Warmup (VERY IMPORTANT)
-#dummy = np.zeros((1, IMG_SIZE[0], IMG_SIZE[1], 3), dtype=np.float32)
-#model.predict(dummy)
+dummy = np.zeros((1, 224, 224, 3), dtype=np.float32)
+model.predict(dummy)
 #print("🔥 Model warmed up")
 
 # ─────────────────────────────────────────────
