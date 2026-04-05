@@ -81,10 +81,15 @@ def load_model():
         model = None
 
 # ───────────────── ROUTES ─────────────────
-@app.get("/")
-def serve_dashboard(request: Request):
-    return templates.TemplateResponse("dashboard.html", {"request": request})
+from fastapi.responses import HTMLResponse
 
+@app.get("/", response_class=HTMLResponse)
+def serve_dashboard():
+    try:
+        with open(os.path.join(BASE_DIR, "templates", "dashboard.html"), "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception as e:
+        return f"<h2>Error loading dashboard: {e}</h2>"
 @app.get("/health")
 def health():
     return {
