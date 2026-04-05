@@ -32,10 +32,19 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # LOAD MODEL (ON STARTUP)
 # ─────────────────────────────────────────────
 
-print("🚀 Loading model...")
-model = load_model("best_model_phase2.keras")
-print("✅ Model loaded")
+import gdown
 
+MODEL_PATH = "best_model_phase2.keras"
+
+if not os.path.exists(MODEL_PATH):
+    print("⬇️ Downloading model from Google Drive...")
+
+    url = "https://drive.google.com/uc?id=11uhh09WzNMH3ZbXDhAPNtVO4fn5o3DXE"
+    gdown.download(url, MODEL_PATH, quiet=False)
+
+print("🚀 Loading model...")
+model = load_model(MODEL_PATH)
+print("✅ Model loaded")
 # 🔥 Warmup (VERY IMPORTANT)
 dummy = np.zeros((1, IMG_SIZE[0], IMG_SIZE[1], 3), dtype=np.float32)
 model.predict(dummy)
