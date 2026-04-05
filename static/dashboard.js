@@ -51,10 +51,7 @@ async function callAPI(file, imgSrc) {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await fetch(`${API_URL}/predict`, {
-      method: 'POST',
-      body: formData
-    });
+    const response = await fetch(\${API_URL}/predict`, {`
 
     if (!response.ok) throw new Error(`Server error: ${response.status}`);
 
