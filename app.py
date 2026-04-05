@@ -139,48 +139,53 @@ def to_b64(img_rgb):
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
     try:
-        img_rgb  = np.array(
-            Image.open(io.BytesIO(await file.read())).convert("RGB"))
-        display  = cv2.resize(img_rgb, IMG_SIZE)
-        inp      = preprocess(display)
+        print("📥 File received")
 
-        prob_tb  = float(model.predict(inp, verbose=0)[0][0])
+        # Load image
+        img = Image.open(io.BytesIO(await file.read())).convert("RGB")
+        print("✅ Image loaded")
+
+        # Resize
+        img = img.resize((224, 224))
+        img = np.array(img)
+        print("✅ Resized:", img.shape)
+
+        # Normalize
+        img = img / 255.0
+
+        # Ensure 3 channels
+        if img.shape[-1] != 3:
+            img = np.stack([img]*3, axis=-1)
+
+        # Add batch dimension
+        inp = np.expand_dims(img, axis=0)
+        print("✅ Final shape:", inp.shape)
+
+        # Prediction
+        pred = model.predict(inp, verbose=0)
+        print("✅ Prediction done")
+
+        prob_tb = float(pred[0][0])
         prob_nor = 1 - prob_tb
-        is_tb    = prob_tb >= THRESHOLD
-        conf     = prob_tb if is_tb else prob_nor
-
-        if is_tb:
-            heatmap = None #make_gradcam(inp)
-            gradcam_b64 = None #to_b64(overlay_heatmap(display, heatmap))
-            bbox = None #get_bbox(heatmap, *IMG_SIZE)
-        else:
-            gradcam_b64 = None
-            bbox = None
-
-        finding = (
-            f"Findings highly suggestive of active pulmonary TB. "
-            f"TB probability: {prob_tb*100:.1f}%. Consult a specialist immediately."
-            if is_tb else
-            f"No significant pulmonary abnormalities detected. "
-            f"Normal probability: {prob_nor*100:.1f}%. Routine follow-up recommended."
-        )
+        is_tb = prob_tb >= THRESHOLD
+        conf = prob_tb if is_tb else prob_nor
 
         return JSONResponse({
-            "success"     : True,
-            "is_tb"       : is_tb,
-            "prob_tb"     : round(prob_tb * 100, 1),
-            "prob_normal" : round(prob_nor * 100, 1),
-            "confidence"  : round(conf * 100, 1),
-            "label"       : "HIGH RISK OF TUBERCULOSIS" if is_tb else "NORMAL — No TB Detected",
-            "finding"     : finding,
-            "gradcam_b64" : gradcam_b64,
-            "bbox"        : bbox,
-            "filename"    : file.filename,
+            "success": True,
+            "is_tb": is_tb,
+            "prob_tb": round(prob_tb * 100, 1),
+            "prob_normal": round(prob_nor * 100, 1),
+            "confidence": round(conf * 100, 1),
+            "label": "HIGH RISK OF TUBERCULOSIS" if is_tb else "NORMAL — No TB Detected",
+            "finding": "TB detected" if is_tb else "No TB detected",
+            "gradcam_b64": None,
+            "bbox": None,
+            "filename": file.filename,
         })
 
     except Exception as e:
+        print("❌ ERROR:", str(e))
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
-
 
 @app.get("/health")
 def health():
