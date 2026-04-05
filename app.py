@@ -30,6 +30,18 @@ tf.config.set_visible_devices([], 'GPU')
 # ───────────────── APP INIT ─────────────────
 app = FastAPI(title="TB Detection AI")
 
+import threading, time, requests
+
+def keep_alive():
+    while True:
+        time.sleep(14 * 60)
+        try:
+            requests.get("https://x-ray-detection-model.onrender.com/health", timeout=10)
+            print("♻️ Keep-alive ping")
+        except: pass
+
+threading.Thread(target=keep_alive, daemon=True).start()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -188,13 +200,7 @@ async def predict(file: UploadFile = File(...)):
         confidence = prob_tb if is_tb else prob_normal
 
         gradcam_img = None
-        try:
-            heatmap = make_gradcam(inp)
-            if heatmap is not None:
-                overlay = overlay_heatmap(display, heatmap)
-                gradcam_img = to_b64(overlay)
-        except:
-            pass
+        
 
         return {
             "success": True,
