@@ -111,60 +111,39 @@ def preprocess(img_rgb: np.ndarray) -> np.ndarray:
 
 # ─────────────────── GRAD-CAM (FIXED) ────────────────────────
 
-def make_gradcam(img_array: np.ndarray) -> np.ndarray:
-    """
-    Generate Grad-CAM heatmap.
-    Handles nested DenseNet121 inside outer model correctly.
-    """
+def make_gradcam(img_array):
     try:
-        # Get DenseNet submodel
-        densenet  = model.get_layer("densenet121")
-        last_conv = densenet.get_layer("conv5_block16_2_conv")
+        # Last convolution layer directly from model
+        last_conv_layer = None
+        for layer in reversed(model.layers):
+            if "conv" in layer.name:
+                last_conv_layer = layer
+                break
 
-        # Inner model: densenet input → [last conv out, densenet out]
-        inner_model = tf.keras.Model(
-            inputs=densenet.input,
-            outputs=[last_conv.output, densenet.output]
+        grad_model = tf.keras.models.Model(
+            [model.inputs],
+            [last_conv_layer.output, model.output]
         )
-
-        # Get classification head layers
-        gap       = model.get_layer("global_average_pooling2d")
-        drop1     = model.get_layer("dropout")
-        dense1    = model.get_layer("dense")
-        bn        = model.get_layer("batch_normalization")
-        drop2     = model.get_layer("dropout_1")
-        out_layer = model.get_layer("tb_prediction")
 
         with tf.GradientTape() as tape:
-            img_t = tf.cast(img_array, tf.float32)
-            conv_out, dn_out = inner_model(img_t, training=False)
-            tape.watch(conv_out)
+            conv_outputs, predictions = grad_model(img_array)
+            loss = predictions[:, 0]
 
-            # Pass through classification head manually
-            x = gap(dn_out)
-            x = drop1(x, training=False)
-            x = dense1(x)
-            x = bn(x, training=False)
-            x = drop2(x, training=False)
-            preds = out_layer(x)
-            loss  = preds[:, 0]
+        grads = tape.gradient(loss, conv_outputs)
 
-        # Compute gradients
-        grads   = tape.gradient(loss, conv_out)
-        pooled  = tf.reduce_mean(grads, axis=(0, 1, 2))
-        heatmap = np.squeeze(
-            (conv_out[0] @ pooled[..., tf.newaxis]).numpy()
-        )
+        pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
 
-        # ReLU + normalize
+        conv_outputs = conv_outputs[0]
+        heatmap = conv_outputs @ pooled_grads[..., tf.newaxis]
+        heatmap = tf.squeeze(heatmap)
+
         heatmap = np.maximum(heatmap, 0)
-        if heatmap.max() > 0:
-            heatmap /= heatmap.max()
+        heatmap /= np.max(heatmap) if np.max(heatmap) != 0 else 1
 
-        return heatmap
+        return heatmap.numpy()
 
     except Exception as e:
-        print(f"❌ GradCAM Error: {e}")
+        print("❌ GradCAM Error:", e)
         return None
 
 
