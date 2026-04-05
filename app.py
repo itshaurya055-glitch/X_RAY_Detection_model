@@ -1,90 +1,137 @@
-import io
-import os
-import numpy as np
-import base64
-import threading
-import time
+"""
+=============================================================
+  TB Detection - FastAPI Backend (Render Deployment)
+  Serves dashboard.html + prediction API
+=============================================================
+  Local  : python app.py  → http://localhost:8000
+  Render : Auto-deployed from GitHub
+=============================================================
+"""
+
+import io, os, base64, cv2, numpy as np
 from pathlib import Path
-
-from fastapi import FastAPI, File, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
-import requests
-
 from PIL import Image
+from fastapi import FastAPI, File, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
+import matplotlib; matplotlib.use("Agg")
+import warnings; warnings.filterwarnings("ignore")
+
+# ─────────────────────────── CONFIG ───────────────────────────
+MODEL_PATH = os.path.join(os.path.dirname(__file__),
+                          "models", "best_model_phase2.keras")
+IMG_SIZE   = (224, 224)
+THRESHOLD  = 0.35
+MEAN       = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+STD        = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+# ──────────────────────────────────────────────────────────────
+
+app = FastAPI(title="TB Detection API")
+app.add_middleware(CORSMiddleware, allow_origins=["*"],
+                   allow_methods=["*"], allow_headers=["*"])
+app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
+
+# ── Load model at startup ──
+import os
+import requests
 import tensorflow as tf
-tf.config.threading.set_intra_op_parallelism_threads(1)
-tf.config.threading.set_inter_op_parallelism_threads(1)
-import gdown
 
-MODEL_PATH = "best_model_phase2.keras"
+MODEL_URL = "https://drive.google.com/uc?id=11uhh09WzNMH3ZbXDhAPNtVO4fn5o3DXE"
+MODEL_PATH = "model.keras"
 
-if not os.path.exists(MODEL_PATH):
-    print("⬇️ Downloading model...")
-    url = "https://drive.google.com/uc?id=11uhh09WzNMH3ZbXDhAPNtVO4fn5o3DXE"
-    gdown.download(url, MODEL_PATH, quiet=False)
+def download_model():
+    if not os.path.exists(MODEL_PATH):
+        print("⬇ Downloading model...")
 
-print("🚀 Loading model...")
-model = tf.keras.models.load_model(MODEL_PATH, compile=False)
-print("✅ Model loaded")
+        response = requests.get(MODEL_URL, stream=True, timeout=60)
+        with open(MODEL_PATH, "wb") as f:
+            for chunk in response.iter_content(1024):
+                if chunk:
+                    f.write(chunk)
 
-# ─────────────────────────────────────────────
-# CONFIG
-# ─────────────────────────────────────────────
+        print("✅ Model downloaded!")
 
-IMG_SIZE = (224, 224)   # 🔥 faster than 224
-THRESHOLD = 0.5
+# 🔥 Run this BEFORE loading model
+download_model()
 
-# ImageNet normalization
-MEAN = np.array([0.485, 0.456, 0.406])
-STD  = np.array([0.229, 0.224, 0.225])
+print("📦 Loading model...")
+model = tf.keras.models.load_model(MODEL_PATH)
+print("✅ Model loaded!")
 
-app = FastAPI()
-
-def keep_alive():
-    while True:
-        time.sleep(14 * 60)
-        try:
-            requests.get("https://x-ray-detection-model.onrender.com/health", timeout=10)
-            print("♻️ Keep-alive ping sent")
-        except Exception:
-            pass
-
-threading.Thread(target=keep_alive, daemon=True).start()
-
-# Static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# ─────────────────────────────────────────────
-# LOAD MODEL (ON STARTUP)
-# ─────────────────────────────────────────────
-
-# ─────────────────────────────────────────────
-
-# SERVE UI
-# ─────────────────────────────────────────────
-
-@app.get("/")
+# ── Serve dashboard.html at root ──
+@app.get("/", response_class=HTMLResponse)
 def serve_dashboard():
     html_path = Path(__file__).parent / "templates" / "dashboard.html"
-
     if html_path.exists():
-        return HTMLResponse(html_path.read_text(encoding="utf-8"))
+        return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
+    return HTMLResponse("<h2>dashboard.html not found</h2>", status_code=404)
 
-    return HTMLResponse("<h2>Dashboard not found ❌</h2>")
 
-# ─────────────────────────────────────────────
-# HEALTH CHECK
-# ─────────────────────────────────────────────
+# ── Helpers ──
+def preprocess(img_rgb):
+    img = cv2.resize(img_rgb, IMG_SIZE).astype(np.float32) / 255.0
+    return np.expand_dims((img - MEAN) / STD, axis=0)
 
-@app.get("/health")
-def health():
-    return {"status": "ok", "model": "CheXNet DenseNet-121"}
 
-# ─────────────────────────────────────────────
-# PREDICT
-# ─────────────────────────────────────────────
+def make_gradcam(img_array):
+    try:
+        grad_model = tf.keras.models.Model(
+            [model.inputs],
+            [model.get_layer("conv5_block16_concat").output, model.output]
+        )
 
+        with tf.GradientTape() as tape:
+            conv_outputs, predictions = grad_model(img_array)
+            loss = predictions[:, 0]
+
+        grads = tape.gradient(loss, conv_outputs)
+
+        pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
+        conv_outputs = conv_outputs[0]
+
+        heatmap = conv_outputs @ pooled_grads[..., tf.newaxis]
+        heatmap = tf.squeeze(heatmap)
+
+        heatmap = np.maximum(heatmap, 0)
+        heatmap /= np.max(heatmap) if np.max(heatmap) != 0 else 1
+
+        return heatmap.numpy()
+
+    except Exception as e:
+        print("❌ GradCAM Error:", e)
+        return None
+
+
+def overlay_heatmap(img_rgb, heatmap, alpha=0.45):
+    h, w  = img_rgb.shape[:2]
+    hm    = cv2.applyColorMap(
+                np.uint8(255 * cv2.resize(heatmap, (w, h))),
+                cv2.COLORMAP_JET)
+    sup   = cv2.addWeighted(
+                cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR), 1-alpha,
+                hm, alpha, 0)
+    return cv2.cvtColor(sup, cv2.COLOR_BGR2RGB)
+
+
+def get_bbox(heatmap, w, h, thr=0.5):
+    binary = (cv2.resize(heatmap, (w, h)) > thr).astype(np.uint8)
+    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL,
+                                   cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return None
+    x, y, bw, bh = cv2.boundingRect(max(contours, key=cv2.contourArea))
+    return {"left":  round(x/w*100, 1), "top":    round(y/h*100, 1),
+            "width": round(bw/w*100, 1), "height": round(bh/h*100, 1)}
+
+
+def to_b64(img_rgb):
+    buf = io.BytesIO()
+    Image.fromarray(img_rgb.astype(np.uint8)).save(buf, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
+# ── Predict endpoint ──
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
     try:
@@ -92,14 +139,15 @@ async def predict(file: UploadFile = File(...)):
 
         # Load image
         img = Image.open(io.BytesIO(await file.read())).convert("RGB")
+        print("✅ Image loaded")
 
         # Resize
-        img = img.resize(IMG_SIZE)
-        img = np.array(img).astype(np.float32)
+        img = img.resize((224, 224))
+        img = np.array(img)
+        print("✅ Resized:", img.shape)
 
-        # Normalize (IMPORTANT)
+        # Normalize
         img = img / 255.0
-        img = (img - MEAN) / STD
 
         # Ensure 3 channels
         if img.shape[-1] != 3:
@@ -107,28 +155,54 @@ async def predict(file: UploadFile = File(...)):
 
         # Add batch dimension
         inp = np.expand_dims(img, axis=0)
+        print("✅ Final shape:", inp.shape)
 
-        # Safety check
-        if inp.shape != (1, IMG_SIZE[0], IMG_SIZE[1], 3):
-            return JSONResponse(
-                {"success": False, "error": "Invalid input shape"},
-                status_code=500
-            )
+        if inp.shape != (1, 224, 224, 3):
+            print("⚠️ Shape error:", inp.shape)
+            return JSONResponse({"success": False, "error": "Invalid input shape"}, status_code=500)
 
         # Prediction
-        pred = model(inp, training=False)
+        pred = model.predict(inp, verbose=0)
+        print("✅ Prediction done")
 
         prob_tb = float(pred[0][0])
-
-        # NaN safety
         if np.isnan(prob_tb):
             prob_tb = 0.0
-
         prob_nor = 1 - prob_tb
         is_tb = prob_tb >= THRESHOLD
         conf = prob_tb if is_tb else prob_nor
 
-        print("✅ Prediction done:", prob_tb)
+        gradcam_b64 = None
+        bbox = None
+
+        if prob_tb > 0.7:
+            print("🔥 Running GradCAM...")
+
+            heatmap = make_gradcam(inp)
+
+            if heatmap is not None:
+                heatmap = cv2.resize(heatmap, (224, 224), interpolation=cv2.INTER_CUBIC)
+
+                heatmap_colored = cv2.applyColorMap(
+                    np.uint8(255 * heatmap),
+                    cv2.COLORMAP_JET
+                )
+
+                original_img = (img * 255).astype(np.uint8)
+
+                overlay = cv2.addWeighted(
+                    original_img, 0.6,
+                    heatmap_colored, 0.4, 0
+                )
+
+                _, buffer = cv2.imencode('.jpg', overlay)
+                gradcam_b64 = "data:image/jpeg;base64," + base64.b64encode(buffer).decode()
+
+                bbox = get_bbox(heatmap, 224, 224)
+
+                print("✅ GradCAM done")
+            else:
+                print("⚠️ GradCAM failed")
 
         return JSONResponse({
             "success": True,
@@ -137,18 +211,17 @@ async def predict(file: UploadFile = File(...)):
             "prob_normal": round(prob_nor * 100, 1),
             "confidence": round(conf * 100, 1),
             "label": "HIGH RISK OF TUBERCULOSIS" if is_tb else "NORMAL — No TB Detected",
-            "finding": (
-                f"TB probability: {prob_tb*100:.1f}%" if is_tb
-                else f"Normal probability: {prob_nor*100:.1f}%"
-            ),
-            "gradcam_b64": None,   # disabled for speed
-            "bbox": None,
+            "finding": "TB detected" if is_tb else "No TB detected",
+            "gradcam_b64": gradcam_b64,
+            "bbox": bbox,
             "filename": file.filename,
         })
 
     except Exception as e:
         print("❌ ERROR:", str(e))
-        return JSONResponse(
-            {"success": False, "error": str(e)},
-            status_code=500
-        )
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "model": "CheXNet DenseNet-121"}
+
