@@ -87,7 +87,7 @@ print(f"   Output shape : {model.output_shape}")
 def serve_dashboard():
     """Serve dashboard.html — for local testing only.
        On Netlify+Render setup, dashboard is hosted separately."""
-    html_path = Path(__file__).parent / "dashboard.html"
+    html_path = Path(__file__).parent / "templates" / "dashboard.html"
     if html_path.exists():
         return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
     return HTMLResponse("""
