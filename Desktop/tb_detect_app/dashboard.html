@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TB Detect AI — Detection Portal</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --primary: #1a6fb5;
+    --primary-light: #e8f2fc;
+    --primary-mid: #3b8fd4;
+    --danger: #c0392b;
+    --danger-light: #fdf0ef;
+    --success: #1a7a4a;
+    --success-light: #edf7f2;
+    --bg: #f4f7fb;
+    --sidebar: #ffffff;
+    --card: #ffffff;
+    --text: #1a2333;
+    --text-muted: #6b7a99;
+    --border: #e2e8f4;
+    --shadow: 0 2px 16px rgba(26,111,181,0.08);
+    --radius: 16px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    min-height: 100vh;
+  }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: 220px;
+    background: var(--sidebar);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 28px 16px;
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 8px 32px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+
+  .logo-icon {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-mid));
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-size: 18px;
+  }
+
+  .logo-text {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.2;
+  }
+  .logo-text span { color: var(--primary); }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-muted);
+    transition: all 0.18s;
+    margin-bottom: 4px;
+    text-decoration: none;
+  }
+  .nav-item:hover { background: var(--primary-light); color: var(--primary); }
+  .nav-item.active {
+    background: var(--primary-light);
+    color: var(--primary);
+    font-weight: 600;
+  }
+  .nav-item svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+  .nav-badge {
+    margin-left: auto;
+    background: var(--primary);
+    color: white;
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 20px;
+    font-weight: 600;
+  }
+
+  /* ── MAIN ── */
+  .main {
+    margin-left: 220px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  .topbar {
+    background: white;
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+
+  .topbar-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .avatar {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary-light), var(--primary-mid));
+    display: flex; align-items: center; justify-content: center;
+    color: var(--primary);
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    border: 2px solid var(--border);
+  }
+
+  .content {
+    padding: 32px;
+    flex: 1;
+  }
+
+  /* ── STATES ── */
+  .state { display: none; }
+  .state.active { display: block; }
+
+  /* ── UPLOAD STATE ── */
+  .upload-zone {
+    border: 2px dashed var(--primary-mid);
+    border-radius: var(--radius);
+    background: white;
+    padding: 80px 40px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .upload-zone::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(232,242,252,0.5) 0%, transparent 100%);
+    pointer-events: none;
+  }
+
+  .upload-zone:hover {
+    border-color: var(--primary);
+    background: var(--primary-light);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow);
+  }
+
+  .upload-zone.drag-over {
+    border-color: var(--primary);
+    background: var(--primary-light);
+    transform: scale(1.01);
+  }
+
+  .upload-icon {
+    width: 64px; height: 64px;
+    margin: 0 auto 24px;
+    color: var(--primary-mid);
+  }
+
+  .upload-title {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 10px;
+    line-height: 1.3;
+  }
+
+  .upload-sub {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 28px;
+  }
+
+  .upload-btn {
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: 12px 32px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.18s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .upload-btn:hover { background: #155d9e; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(26,111,181,0.3); }
+
+  #file-input { display: none; }
+
+  /* Stats row */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-top: 24px;
+  }
+
+  .stat-card {
+    background: white;
+    border-radius: var(--radius);
+    padding: 20px;
+    border: 1px solid var(--border);
+    text-align: center;
+  }
+
+  .stat-value {
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--primary);
+    font-family: 'DM Mono', monospace;
+  }
+
+  .stat-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    font-weight: 500;
+  }
+
+  /* ── PROCESSING STATE ── */
+  .processing-card {
+    background: white;
+    border-radius: var(--radius);
+    overflow: hidden;
+    border: 1px solid var(--border);
+    position: relative;
+  }
+
+  .processing-img-wrap {
+    position: relative;
+    background: #0a0f1a;
+  }
+
+  .processing-img-wrap img {
+    width: 100%;
+    height: 480px;
+    object-fit: cover;
+    opacity: 0.55;
+    display: block;
+  }
+
+  .processing-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+  }
+
+  .spinner {
+    width: 72px; height: 72px;
+    animation: spin 1.5s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .processing-text {
+    color: white;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  .processing-sub {
+    color: rgba(255,255,255,0.6);
+    font-size: 13px;
+    margin-top: -12px;
+  }
+
+  .upload-badge {
+    position: absolute;
+    top: 16px; right: 16px;
+    background: rgba(26, 122, 74, 0.95);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    animation: slideIn 0.3s ease;
+  }
+
+  @keyframes slideIn {
+    from { transform: translateY(-12px); opacity: 0; }
+    to   { transform: translateY(0);     opacity: 1; }
+  }
+
+  /* ── RESULT STATE ── */
+  .result-layout {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 24px;
+    align-items: start;
+  }
+
+  .xray-card {
+    background: #0d1117;
+    border-radius: var(--radius);
+    overflow: hidden;
+    position: relative;
+  }
+
+  .xray-card img {
+    width: 100%;
+    display: block;
+  }
+
+  .bbox {
+    position: absolute;
+    border: 3px solid #e74c3c;
+    border-radius: 6px;
+    box-shadow: 0 0 0 2px rgba(231,76,60,0.3), inset 0 0 20px rgba(231,76,60,0.1);
+    animation: pulse-border 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-border {
+    0%, 100% { box-shadow: 0 0 0 2px rgba(231,76,60,0.3), inset 0 0 20px rgba(231,76,60,0.1); }
+    50%       { box-shadow: 0 0 0 6px rgba(231,76,60,0.15), inset 0 0 30px rgba(231,76,60,0.2); }
+  }
+
+  .result-card {
+    background: white;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .result-header {
+    padding: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .result-label {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  .result-title {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .result-title.danger { color: var(--danger); }
+  .result-title.success { color: var(--success); }
+
+  .result-body { padding: 20px 24px; }
+
+  .confidence-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .confidence-label { font-size: 13px; color: var(--text-muted); font-weight: 500; }
+  .confidence-value { font-size: 20px; font-weight: 700; font-family: 'DM Mono', monospace; color: var(--text); }
+
+  .confidence-bar-wrap {
+    background: var(--border);
+    border-radius: 100px;
+    height: 8px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+
+  .confidence-bar {
+    height: 100%;
+    border-radius: 100px;
+    transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .confidence-bar.danger { background: linear-gradient(90deg, #e74c3c, #c0392b); }
+  .confidence-bar.success { background: linear-gradient(90deg, #27ae60, #1a7a4a); }
+
+  .gradcam-thumb {
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 16px;
+    border: 1px solid var(--border);
+    position: relative;
+  }
+
+  .gradcam-thumb img {
+    width: 100%;
+    display: block;
+  }
+
+  .gradcam-label {
+    position: absolute;
+    bottom: 8px; left: 8px;
+    background: rgba(0,0,0,0.65);
+    color: white;
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+
+  .finding-text {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.6;
+    padding: 14px;
+    background: var(--danger-light);
+    border-radius: 10px;
+    border-left: 3px solid var(--danger);
+    margin-bottom: 20px;
+  }
+
+  .finding-text.normal {
+    background: var(--success-light);
+    border-left-color: var(--success);
+  }
+
+  .action-btns { display: flex; flex-direction: column; gap: 10px; }
+
+  .btn {
+    padding: 13px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.18s;
+  }
+
+  .btn-primary {
+    background: var(--primary);
+    color: white;
+  }
+  .btn-primary:hover { background: #155d9e; transform: translateY(-1px); }
+
+  .btn-outline {
+    background: white;
+    color: var(--text);
+    border: 1.5px solid var(--border);
+  }
+  .btn-outline:hover { background: var(--bg); }
+
+  /* ── HISTORY ── */
+  .history-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+
+  .history-card {
+    background: white;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.18s;
+  }
+  .history-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+
+  .history-img {
+    width: 100%;
+    height: 160px;
+    object-fit: cover;
+    background: #0d1117;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #444;
+    font-size: 13px;
+  }
+
+  .history-info { padding: 14px; }
+  .history-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .history-date { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .tag.tb { background: var(--danger-light); color: var(--danger); }
+  .tag.normal { background: var(--success-light); color: var(--success); }
+
+  /* ── SETTINGS ── */
+  .settings-card {
+    background: white;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    padding: 28px;
+    margin-bottom: 20px;
+  }
+
+  .settings-title { font-size: 16px; font-weight: 600; margin-bottom: 20px; }
+
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .setting-row:last-child { border-bottom: none; }
+
+  .setting-label { font-size: 14px; font-weight: 500; }
+  .setting-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  .toggle {
+    width: 44px; height: 24px;
+    background: var(--primary);
+    border-radius: 100px;
+    position: relative;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    width: 18px; height: 18px;
+    background: white;
+    border-radius: 50%;
+    top: 3px; right: 3px;
+    transition: all 0.2s;
+  }
+  .toggle.off { background: var(--border); }
+  .toggle.off::after { right: auto; left: 3px; }
+
+  .threshold-input {
+    font-family: 'DM Mono', monospace;
+    font-size: 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 12px;
+    width: 80px;
+    text-align: center;
+    outline: none;
+    color: var(--text);
+  }
+  .threshold-input:focus { border-color: var(--primary); }
+
+  /* section header */
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .section-title { font-size: 18px; font-weight: 700; }
+  .section-sub { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="logo">
+    <div class="logo-icon">🫁</div>
+    <div class="logo-text">TB Detect <span>AI</span></div>
+  </div>
+
+  <nav>
+    <a class="nav-item active" onclick="showPage('analysis')" href="#">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+      </svg>
+      Analysis
+      <span class="nav-badge">Active</span>
+    </a>
+    <a class="nav-item" onclick="showPage('history')" href="#">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      History
+    </a>
+    <a class="nav-item" onclick="showPage('settings')" href="#">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+      </svg>
+      Settings
+    </a>
+  </nav>
+</aside>
+
+<!-- MAIN -->
+<main class="main">
+  <div class="topbar">
+    <span class="topbar-title" id="page-title">TB Detection Portal</span>
+    <div class="topbar-right">
+      <div class="avatar">DR</div>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- ── ANALYSIS PAGE ── -->
+    <div class="state active" id="page-analysis">
+
+      <!-- STATE 1: UPLOAD -->
+      <div id="state-upload">
+        <div class="section-header">
+          <div>
+            <div class="section-title">New Analysis</div>
+            <div class="section-sub">Upload a chest X-ray to begin TB screening</div>
+          </div>
+        </div>
+
+        <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
+          <svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.338-2.32 5.75 5.75 0 011.984 11.095H6.75z"/>
+          </svg>
+          <div class="upload-title">Drag & Drop Chest X-ray<br>(DICOM / JPG / PNG)</div>
+          <div class="upload-sub">or click to browse your files</div>
+          <button class="upload-btn" onclick="event.stopPropagation(); document.getElementById('file-input').click()">
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+            </svg>
+            Browse Files
+          </button>
+          <div class="upload-sub" style="margin-top:16px; margin-bottom:0">Accepted formats: DICOM, JPG, PNG &nbsp;·&nbsp; Max 50MB</div>
+        </div>
+        <input type="file" id="file-input" accept=".png,.jpg,.jpeg,.dcm" onchange="handleFile(this)">
+
+        <!-- Model Stats -->
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="stat-value">88.2%</div>
+            <div class="stat-label">Accuracy</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">93.4%</div>
+            <div class="stat-label">AUC-ROC</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">97.1%</div>
+            <div class="stat-label">Precision</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">79.1%</div>
+            <div class="stat-label">Sensitivity</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STATE 2: PROCESSING -->
+      <div id="state-processing" style="display:none">
+        <div class="processing-card">
+          <div class="processing-img-wrap">
+            <img id="processing-img" src="" alt="X-ray">
+            <div class="upload-badge" id="upload-badge">
+              ✓ &nbsp;<span id="upload-filename">file.png</span> uploaded successfully.
+            </div>
+            <div class="processing-overlay">
+              <svg class="spinner" viewBox="0 0 50 50" fill="none">
+                <circle cx="25" cy="25" r="20" stroke="rgba(255,255,255,0.2)" stroke-width="4"/>
+                <path d="M25 5 a20 20 0 0 1 20 20" stroke="#3b8fd4" stroke-width="4" stroke-linecap="round"/>
+              </svg>
+              <div class="processing-text">Analyzing image...</div>
+              <div class="processing-sub">Running CheXNet DenseNet-121 inference</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STATE 3: RESULT -->
+      <div id="state-result" style="display:none">
+        <div class="section-header">
+          <div>
+            <div class="section-title">Analysis Complete</div>
+            <div class="section-sub" id="result-filename">patient_xray.png</div>
+          </div>
+          <button class="btn btn-outline" onclick="resetToUpload()" style="width:auto;padding:10px 20px">
+            ← New Analysis
+          </button>
+        </div>
+
+        <div class="result-layout">
+          <!-- X-ray with bounding box -->
+          <div class="xray-card">
+            <img id="result-xray" src="" alt="X-ray">
+            <div class="bbox" id="result-bbox" style="display:none;top:18%;left:15%;width:35%;height:32%"></div>
+          </div>
+
+          <!-- Result Panel -->
+          <div class="result-card">
+            <div class="result-header">
+              <div class="result-label">Diagnosis Result</div>
+              <div class="result-title" id="result-title">—</div>
+            </div>
+
+            <div class="result-body">
+              <div class="confidence-row">
+                <span class="confidence-label">Confidence Score</span>
+                <span class="confidence-value" id="confidence-value">—</span>
+              </div>
+              <div class="confidence-bar-wrap">
+                <div class="confidence-bar" id="confidence-bar" style="width:0%"></div>
+              </div>
+
+              <!-- Prob breakdown -->
+              <div style="display:flex;gap:10px;margin-bottom:18px">
+                <div style="flex:1;background:var(--success-light);border-radius:10px;padding:12px;text-align:center">
+                  <div style="font-size:18px;font-weight:700;font-family:'DM Mono',monospace;color:var(--success)" id="prob-normal">—</div>
+                  <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Normal</div>
+                </div>
+                <div style="flex:1;background:var(--danger-light);border-radius:10px;padding:12px;text-align:center">
+                  <div style="font-size:18px;font-weight:700;font-family:'DM Mono',monospace;color:var(--danger)" id="prob-tb">—</div>
+                  <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Tuberculosis</div>
+                </div>
+              </div>
+
+              <!-- GradCAM -->
+              <div class="gradcam-thumb">
+                <div id="gradcam-placeholder" style="height:130px;background:linear-gradient(135deg,#0d1117,#1a2333);display:flex;align-items:center;justify-content:center;color:#555;font-size:13px">
+                  🔥 Grad-CAM will appear after analysis
+                </div>
+                <img id="gradcam-img" src="" alt="Grad-CAM"
+                     style="width:100%;display:none;border-radius:10px 10px 0 0;">
+                <div class="gradcam-label">🔥 Region of interest highlighted</div>
+              </div>
+
+              <div class="finding-text" id="finding-text">—</div>
+
+              <div class="action-btns">
+                <button class="btn btn-primary" onclick="downloadReport()">
+                  <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/>
+                  </svg>
+                  Download Detailed Report
+                </button>
+                <button class="btn btn-outline" onclick="resetToUpload()">
+                  Start New Analysis
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── HISTORY PAGE ── -->
+    <div class="state" id="page-history">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Analysis History</div>
+          <div class="section-sub">Previous screening results</div>
+        </div>
+        <button class="btn btn-outline" onclick="clearHistory()" style="width:auto;padding:10px 20px;color:var(--danger);border-color:var(--danger)">
+          Clear History
+        </button>
+      </div>
+      <div class="history-grid" id="history-grid">
+        <div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--text-muted);font-size:14px">
+          No analyses yet. Upload an X-ray to get started.
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SETTINGS PAGE ── -->
+    <div class="state" id="page-settings">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Settings</div>
+          <div class="section-sub">Model and display preferences</div>
+        </div>
+      </div>
+      <div class="settings-card">
+        <div class="settings-title">Model Configuration</div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Detection Threshold</div>
+            <div class="setting-desc">Probability above which result is classified as TB</div>
+          </div>
+          <input class="threshold-input" type="number" value="0.35" min="0.1" max="0.9" step="0.05">
+        </div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Grad-CAM Visualization</div>
+            <div class="setting-desc">Show heatmap overlay on results</div>
+          </div>
+          <div class="toggle"></div>
+        </div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Bounding Box</div>
+            <div class="setting-desc">Highlight detected anomaly region</div>
+          </div>
+          <div class="toggle"></div>
+        </div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Auto-save Results</div>
+            <div class="setting-desc">Save analysis to history automatically</div>
+          </div>
+          <div class="toggle off"></div>
+        </div>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-title">About Model</div>
+        <div class="setting-row">
+          <div class="setting-label">Architecture</div>
+          <div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--primary)">DenseNet-121 (CheXNet)</div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">Dataset</div>
+          <div style="font-size:13px;color:var(--text-muted)">Shenzhen CXR (662 images)</div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">Training</div>
+          <div style="font-size:13px;color:var(--text-muted)">2-phase transfer learning</div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">Best Val AUC</div>
+          <div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--success)">0.9660</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script src="dashboard.js?v=20260405" defer></script>
+</body>
+</html>
