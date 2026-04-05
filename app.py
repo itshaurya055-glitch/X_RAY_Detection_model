@@ -14,6 +14,7 @@ from PIL import Image
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 import matplotlib; matplotlib.use("Agg")
 import warnings; warnings.filterwarnings("ignore")
 
@@ -29,6 +30,7 @@ STD        = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 app = FastAPI(title="TB Detection API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"],
                    allow_methods=["*"], allow_headers=["*"])
+app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
 # ── Load model at startup ──
 import os
