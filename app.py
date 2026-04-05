@@ -59,11 +59,6 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # LOAD MODEL (ON STARTUP)
 # ─────────────────────────────────────────────
 
-# 🔥 Warmup (VERY IMPORTANT)
-dummy = np.zeros((1, 224, 224, 3), dtype=np.float32)
-model.predict(dummy)
-#print("🔥 Model warmed up")
-
 # ─────────────────────────────────────────────
 
 # SERVE UI
