@@ -13,7 +13,20 @@ import requests
 
 from PIL import Image
 import tensorflow as tf
-from tensorflow.keras.models import load_model
+tf.config.threading.set_intra_op_parallelism_threads(1)
+tf.config.threading.set_inter_op_parallelism_threads(1)
+import gdown
+
+MODEL_PATH = "best_model_phase2.keras"
+
+if not os.path.exists(MODEL_PATH):
+    print("⬇️ Downloading model...")
+    url = "https://drive.google.com/uc?id=11uhh09WzNMH3ZbXDhAPNtVO4fn5o3DXE"
+    gdown.download(url, MODEL_PATH, quiet=False)
+
+print("🚀 Loading model...")
+model = tf.keras.models.load_model(MODEL_PATH, compile=False)
+print("✅ Model loaded")
 
 # ─────────────────────────────────────────────
 # CONFIG
@@ -46,24 +59,6 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # LOAD MODEL (ON STARTUP)
 # ─────────────────────────────────────────────
 
-import gdown
-
-MODEL_PATH = "best_model_phase2.keras"
-
-if not os.path.exists(MODEL_PATH):
-    print("⬇️ Downloading model from Google Drive...")
-
-    url = "https://drive.google.com/uc?id=11uhh09WzNMH3ZbXDhAPNtVO4fn5o3DXE"
-    gdown.download(url, MODEL_PATH, quiet=False)
-
-# 🔥 SAFE MODEL LOADING (PUT HERE)
-try:
-    print("🚀 Loading model...")
-    model = tf.keras.models.load_model(MODEL_PATH, compile=False)
-    print("✅ Model loaded")
-except Exception as e:
-    print("❌ MODEL LOAD ERROR:", str(e))
-    raise e
 # 🔥 Warmup (VERY IMPORTANT)
 dummy = np.zeros((1, 224, 224, 3), dtype=np.float32)
 model.predict(dummy)
@@ -126,7 +121,7 @@ async def predict(file: UploadFile = File(...)):
             )
 
         # Prediction
-        pred = model.predict(inp, verbose=0)
+        pred = model(inp, training=False)
 
         prob_tb = float(pred[0][0])
 
