@@ -146,8 +146,9 @@ async def predict(file: UploadFile = File(...)):
         img = np.array(img)
         print("✅ Resized:", img.shape)
 
-        # Normalize
-        img = img / 255.0
+        # Normalize using the same pipeline as training
+        img = img.astype(np.float32) / 255.0
+        img = (img - MEAN) / STD
 
         # Ensure 3 channels
         if img.shape[-1] != 3:
