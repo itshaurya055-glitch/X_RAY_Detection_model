@@ -150,9 +150,9 @@ async def predict(file: UploadFile = File(...)):
         conf     = prob_tb if is_tb else prob_nor
 
         if is_tb:
-            heatmap = make_gradcam(inp)
-            gradcam_b64 = to_b64(overlay_heatmap(display, heatmap))
-            bbox = get_bbox(heatmap, *IMG_SIZE)
+            heatmap = None #make_gradcam(inp)
+            gradcam_b64 = None #to_b64(overlay_heatmap(display, heatmap))
+            bbox = None #get_bbox(heatmap, *IMG_SIZE)
         else:
             gradcam_b64 = None
             bbox = None
