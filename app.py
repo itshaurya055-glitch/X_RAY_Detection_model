@@ -41,6 +41,7 @@ if os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 model = None
+model_ready = False
 
 # ───────────────── KEEP ALIVE ─────────────────
 def keep_alive():
@@ -87,8 +88,9 @@ def download_model():
 # ───────────────── STARTUP ─────────────────
 @app.on_event("startup")
 def startup():
-    global model
+    global model, model_ready
     try:
+        model_ready = False
         print("🚀 Server starting...")
         download_model()
 
@@ -99,6 +101,8 @@ def startup():
         dummy = np.zeros((1, 224, 224, 3), dtype=np.float32)
         model.predict(dummy, verbose=0)
 
+        model_ready = True
+
         print("✅ Model loaded and warmed up!")
         print(f"   Input  : {model.input_shape}")
         print(f"   Output : {model.output_shape}")
@@ -106,6 +110,7 @@ def startup():
     except Exception as e:
         print(f"❌ Startup error: {e}")
         model = None
+        model_ready = False
 
 # ───────────────── SERVE UI ─────────────────
 @app.get("/", response_class=HTMLResponse)
@@ -147,10 +152,10 @@ def preprocess(img_rgb: np.ndarray) -> np.ndarray:
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
     try:
-        # Check model loaded
-        if model is None:
+        # Check model loaded and warmed up
+        if not model_ready or model is None:
             return JSONResponse(
-                {"success": False, "error": "Model not loaded yet, please retry in 30 seconds"},
+                {"success": False, "error": "Model still loading, retry in 10 seconds"},
                 status_code=503
             )
 

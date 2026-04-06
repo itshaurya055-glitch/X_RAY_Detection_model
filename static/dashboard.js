@@ -66,10 +66,19 @@ async function callAPI(file, imgSrc) {
       method: 'POST',
       body: formData
     });
-
-    if (!response.ok) throw new Error(`Server error: ${response.status}`);
-
     const data = await response.json();
+
+    // Auto retry while backend is still loading and warming up model
+    if (response.status === 503) {
+      const processingSub = document.querySelector('.processing-sub');
+      if (processingSub) {
+        processingSub.textContent = '⏳ Model loading, retrying in 10s...';
+      }
+      setTimeout(() => callAPI(file, imgSrc), 10000);
+      return;
+    }
+
+    if (!response.ok) throw new Error(data.error || `Server error: ${response.status}`);
 
     if (!data.success) throw new Error(data.error || 'Prediction failed');
 
